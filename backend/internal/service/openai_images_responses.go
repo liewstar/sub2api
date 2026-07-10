@@ -22,6 +22,7 @@ import (
 
 type openAIResponsesImageResult struct {
 	Result        string
+	URL           string
 	RevisedPrompt string
 	OutputFormat  string
 	Size          string
@@ -140,9 +141,35 @@ func openAIImagesUpstreamErrorResponseBody(err *OpenAIImagesUpstreamError) []byt
 	return body
 }
 
+func openAIImagesReadFailureError(err error) *OpenAIImagesUpstreamError {
+	if errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
+		return &OpenAIImagesUpstreamError{
+			StatusCode: http.StatusBadGateway,
+			ErrorType:  "upstream_error",
+			Code:       "upstream_response_too_large",
+			Message:    "Upstream response too large",
+		}
+	}
+	message := "Upstream response interrupted"
+	if err != nil {
+		if sanitized := sanitizeUpstreamErrorMessage(err.Error()); sanitized != "" {
+			message = sanitized
+		}
+	}
+	return &OpenAIImagesUpstreamError{
+		StatusCode: http.StatusBadGateway,
+		ErrorType:  "upstream_error",
+		Code:       "upstream_response_interrupted",
+		Message:    message,
+	}
+}
+
 func openAIResponsesImageResultKey(itemID string, result openAIResponsesImageResult) string {
 	if strings.TrimSpace(result.Result) != "" {
 		return strings.TrimSpace(result.OutputFormat) + "|" + strings.TrimSpace(result.Result)
+	}
+	if strings.TrimSpace(result.URL) != "" {
+		return "url:" + strings.TrimSpace(result.URL)
 	}
 	return "item:" + strings.TrimSpace(itemID)
 }
@@ -948,9 +975,15 @@ func buildOpenAIImagesAPIResponse(
 	for _, img := range results {
 		item := []byte(`{}`)
 		if format == "url" {
-			item, _ = sjson.SetBytes(item, "url", "data:"+openAIImageOutputMIMEType(img.OutputFormat)+";base64,"+img.Result)
-		} else {
+			url := strings.TrimSpace(img.URL)
+			if url == "" && strings.TrimSpace(img.Result) != "" {
+				url = "data:" + openAIImageOutputMIMEType(img.OutputFormat) + ";base64," + img.Result
+			}
+			item, _ = sjson.SetBytes(item, "url", url)
+		} else if strings.TrimSpace(img.Result) != "" {
 			item, _ = sjson.SetBytes(item, "b64_json", img.Result)
+		} else {
+			item, _ = sjson.SetBytes(item, "url", strings.TrimSpace(img.URL))
 		}
 		if img.RevisedPrompt != "" {
 			item, _ = sjson.SetBytes(item, "revised_prompt", img.RevisedPrompt)
@@ -1071,9 +1104,25 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 	c *gin.Context,
 	responseFormat string,
 	fallbackModel string,
+	jsonKeepalive bool,
 ) (OpenAIUsage, int, []string, error) {
-	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
+	var (
+		body               []byte
+		err                error
+		headersWritten     bool
+		clientDisconnected bool
+	)
+	if jsonKeepalive {
+		body, headersWritten, clientDisconnected, err = s.readOpenAIImagesResponseBodyWithJSONKeepalive(resp, c, "application/json; charset=utf-8")
+	} else {
+		body, err = ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
+	}
 	if err != nil {
+		if headersWritten {
+			upstreamErr := openAIImagesReadFailureError(err)
+			s.writeOpenAIImagesJSONAfterKeepalive(c, openAIImagesUpstreamErrorResponseBody(upstreamErr), clientDisconnected)
+			return OpenAIUsage{}, 0, nil, upstreamErr
+		}
 		return OpenAIUsage{}, 0, nil, err
 	}
 
@@ -1089,7 +1138,11 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 		if upstreamErr := extractOpenAIImagesUpstreamError(body); upstreamErr != nil {
 			setOpsUpstreamError(c, upstreamErr.clientStatusCode(), upstreamErr.clientMessage(), "")
 			if !IsOpenAIImagesRetryableUpstreamError(upstreamErr) {
-				writeOpenAIImagesUpstreamErrorResponse(c, upstreamErr)
+				if headersWritten {
+					s.writeOpenAIImagesJSONAfterKeepalive(c, openAIImagesUpstreamErrorResponseBody(upstreamErr), clientDisconnected)
+				} else {
+					writeOpenAIImagesUpstreamErrorResponse(c, upstreamErr)
+				}
 			}
 			return OpenAIUsage{}, 0, nil, upstreamErr
 		}
@@ -1110,7 +1163,11 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 				Message:    sanitizeUpstreamErrorMessage(refusal),
 			}
 			setOpsUpstreamError(c, http.StatusBadRequest, refusalErr.clientMessage(), summarizeOpenAIImagesNoOutputBody(body))
-			writeOpenAIImagesUpstreamErrorResponse(c, refusalErr)
+			if headersWritten {
+				s.writeOpenAIImagesJSONAfterKeepalive(c, openAIImagesUpstreamErrorResponseBody(refusalErr), clientDisconnected)
+			} else {
+				writeOpenAIImagesUpstreamErrorResponse(c, refusalErr)
+			}
 			return OpenAIUsage{}, 0, nil, refusalErr
 		}
 		// (B) 真空响应：记录上游诊断摘要到 ops（last_event/status/model/body 片段）便于
@@ -1133,8 +1190,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 	if err != nil {
 		return OpenAIUsage{}, 0, nil, err
 	}
-	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
-	c.Data(resp.StatusCode, "application/json; charset=utf-8", responseBody)
+	s.writeOpenAIImagesJSONResponse(c, resp, responseBody, "application/json; charset=utf-8", headersWritten, clientDisconnected)
 	return usage, len(results), openAIResponsesImageResultSizes(results), nil
 }
 
@@ -1623,7 +1679,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 			)
 		}
 	} else {
-		usage, imageCount, imageOutputSizes, err = s.handleOpenAIImagesOAuthNonStreamingResponse(resp, c, parsed.ResponseFormat, requestModel)
+		usage, imageCount, imageOutputSizes, err = s.handleOpenAIImagesOAuthNonStreamingResponse(resp, c, parsed.ResponseFormat, requestModel, account.ForceOpenAIImagesStream())
 		if err != nil {
 			return nil, s.handleOpenAIImagesOAuthResponseError(
 				upstreamCtx,

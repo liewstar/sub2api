@@ -292,6 +292,8 @@ export default {
     type: '类型',
     tokens: 'Token',
     cost: '费用',
+    cacheUtilization: '缓存利用率',
+    tokensPerSecond: 'Token/s',
     firstToken: '首 Token',
     duration: '耗时',
     latency: '延迟',

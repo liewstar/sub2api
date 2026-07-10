@@ -185,6 +185,24 @@
           </div>
         </template>
 
+        <template #cell-cache_utilization="{ row }">
+          <span
+            class="text-sm font-medium tabular-nums"
+            :class="(getUsageCacheUtilization(row) ?? 0) > 0 ? 'text-sky-600 dark:text-sky-400' : 'text-gray-500 dark:text-gray-400'"
+          >
+            {{ formatUsageCacheUtilization(row) }}
+          </span>
+        </template>
+
+        <template #cell-tps="{ row }">
+          <span class="text-sm font-medium tabular-nums text-violet-600 dark:text-violet-400">
+            {{ formatUsageOutputTPS(row) }}
+          </span>
+          <span v-if="formatUsageOutputTPS(row) !== '-'" class="ml-1 text-xs text-gray-400 dark:text-gray-500">
+            {{ t('usage.tokensPerSecond') }}
+          </span>
+        </template>
+
         <!-- 合并首字/总耗时的健康度列：左侧色条上端随首字档、下端随总耗时档，中段(40%-60%)短渐变过渡，便于纵向扫视整体健康状况 -->
         <template #cell-latency="{ row }">
           <div class="flex items-stretch gap-2">
@@ -481,6 +499,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import IpGeoCell from '@/components/common/IpGeoCell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { fetchBatch, getEntry } from '@/utils/ipGeoLookup'
+import { formatUsageCacheUtilization, formatUsageOutputTPS, getUsageCacheUtilization } from '@/utils/usageMetrics'
 import type { AdminUsageLog } from '@/types'
 import type { Column } from '@/components/common/types'
 

@@ -6,9 +6,13 @@ const featureKeyCodexImageGenerationBridge = "codex_image_generation_bridge"
 
 const (
 	featureKeyCodexImageGenerationExplicitToolPolicy = "codex_image_generation_explicit_tool_policy"
+	featureKeyOpenAIImagesStreamMode                 = "openai_images_stream_mode"
 
 	codexImageGenerationExplicitToolPolicyAllow = "allow"
 	codexImageGenerationExplicitToolPolicyStrip = "strip"
+
+	openAIImagesStreamModeClient      = "client"
+	openAIImagesStreamModeForceStream = "force_stream"
 )
 
 func boolOverridePtr(v bool) *bool {
@@ -45,6 +49,15 @@ func normalizeCodexImageGenerationExplicitToolPolicy(value string) string {
 		return codexImageGenerationExplicitToolPolicyStrip
 	default:
 		return codexImageGenerationExplicitToolPolicyAllow
+	}
+}
+
+func normalizeOpenAIImagesStreamMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case openAIImagesStreamModeForceStream, "force", "forced", "stream", "on", "enabled", "true":
+		return openAIImagesStreamModeForceStream
+	default:
+		return openAIImagesStreamModeClient
 	}
 }
 
@@ -106,4 +119,35 @@ func (a *Account) CodexImageGenerationExplicitToolPolicy() string {
 		return normalizeCodexImageGenerationExplicitToolPolicy(policy)
 	}
 	return codexImageGenerationExplicitToolPolicyAllow
+}
+
+// OpenAIImagesStreamMode controls how `/v1/images/*` requests use upstream
+// streaming. The default client mode preserves the caller's `stream` field.
+func (a *Account) OpenAIImagesStreamMode() string {
+	if a == nil || a.Platform != PlatformOpenAI || a.Extra == nil {
+		return openAIImagesStreamModeClient
+	}
+	if mode, ok := stringOverrideFromMap(a.Extra, featureKeyOpenAIImagesStreamMode, "openai_image_stream_mode"); ok {
+		return normalizeOpenAIImagesStreamMode(mode)
+	}
+	if override := boolOverrideFromMap(a.Extra, "openai_images_force_stream", "openai_image_force_stream"); override != nil {
+		if *override {
+			return openAIImagesStreamModeForceStream
+		}
+		return openAIImagesStreamModeClient
+	}
+	openaiConfig, _ := a.Extra[PlatformOpenAI].(map[string]any)
+	if mode, ok := stringOverrideFromMap(openaiConfig, featureKeyOpenAIImagesStreamMode, "openai_image_stream_mode"); ok {
+		return normalizeOpenAIImagesStreamMode(mode)
+	}
+	if override := boolOverrideFromMap(openaiConfig, "openai_images_force_stream", "openai_image_force_stream"); override != nil {
+		if *override {
+			return openAIImagesStreamModeForceStream
+		}
+	}
+	return openAIImagesStreamModeClient
+}
+
+func (a *Account) ForceOpenAIImagesStream() bool {
+	return a.OpenAIImagesStreamMode() == openAIImagesStreamModeForceStream
 }

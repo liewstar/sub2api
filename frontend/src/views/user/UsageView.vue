@@ -233,6 +233,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { BILLING_MODE_IMAGE, getBillingModeLabel } from '@/utils/billingMode'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
+import { formatUsageCacheUtilization, formatUsageOutputTPS } from '@/utils/usageMetrics'
 import type {
   ApiKey,
   EndpointStat,
@@ -649,6 +650,8 @@ const exportToCSV = async () => {
       'Output Tokens',
       'Cache Read Tokens',
       'Cache Creation Tokens',
+      'Cache Utilization',
+      'TPS',
       'Rate Multiplier',
       'Billed Cost',
       'Original Cost',
@@ -668,6 +671,8 @@ const exportToCSV = async () => {
       log.output_tokens,
       log.cache_read_tokens,
       log.cache_creation_tokens,
+      formatUsageCacheUtilization(log),
+      formatUsageOutputTPS(log),
       log.rate_multiplier,
       log.actual_cost.toFixed(8),
       log.total_cost.toFixed(8),
@@ -709,6 +714,8 @@ const allColumns = computed<Column[]>(() => [
   { key: 'billing_mode', label: t('admin.usage.billingMode'), sortable: false },
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
+  { key: 'cache_utilization', label: t('usage.cacheUtilization'), sortable: false },
+  { key: 'tps', label: 'TPS', sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },

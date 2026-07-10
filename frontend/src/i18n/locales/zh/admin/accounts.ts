@@ -565,6 +565,15 @@ export default {
         codexImageToolBadgeEnabled: '强制注入',
         codexImageToolBadgeDisabled: '关闭注入',
         codexImageToolBadgeBlock: '完全阻断',
+        imagesStreamMode: '图片生成流式策略',
+        imagesStreamModeDesc:
+          '控制独立图片生成接口调用上游时是否强制使用 stream。选择强制上游流式时，非流式用户仍会收到普通 JSON，网关会用合法 JSON 空白做连接保活。',
+        imagesStreamModeClient: '跟随用户请求',
+        imagesStreamModeClientDesc: '用户传 stream:true 才走流式；普通请求保持原来的同步上游行为。',
+        imagesStreamModeForce: '强制上游流式',
+        imagesStreamModeForceDesc: '上游始终使用 stream:true；普通用户请求由网关收集完成事件后返回原 Images JSON。',
+        imagesStreamModeForceWarning:
+          '适合放在 Cloudflare 后面的图片账号。若保活空白已经发出，后续上游错误无法再改 HTTP 状态码，但最终响应体仍会保持合法 JSON。',
         compactMode: 'Compact 模式',
         compactModeDesc:
           '控制本账号在 /responses/compact 调度中的参与方式。Auto 跟随探测结果，Force On 强制允许，Force Off 强制排除。',

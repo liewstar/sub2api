@@ -1530,6 +1530,50 @@
                 </span>
               </button>
             </div>
+            <div class="mt-3 border-t border-sky-100 pt-3 dark:border-sky-900/50">
+              <div class="mb-2">
+                <label class="input-label mb-0">{{ t('admin.accounts.openai.imagesStreamMode') }}</label>
+                <p class="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                  {{ t('admin.accounts.openai.imagesStreamModeDesc') }}
+                </p>
+              </div>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  v-for="option in openAIImagesStreamModeOptions"
+                  :key="option.value"
+                  type="button"
+                  :data-testid="`openai-images-stream-mode-${option.value}`"
+                  @click="openAIImagesStreamMode = option.value"
+                  :class="[
+                    'group flex min-h-[58px] items-start gap-2 rounded-md border px-3 py-2 text-left transition-all',
+                    openAIImagesStreamMode === option.value
+                      ? option.selectedCardClass
+                      : 'border-transparent bg-transparent text-slate-600 hover:border-gray-200 hover:bg-gray-50 dark:text-slate-300 dark:hover:border-dark-500 dark:hover:bg-dark-700'
+                  ]"
+                >
+                  <span
+                    :class="[
+                      'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors',
+                      openAIImagesStreamMode === option.value
+                        ? option.selectedDotClass
+                        : 'border-gray-300 text-transparent group-hover:border-gray-400 dark:border-dark-500'
+                    ]"
+                  >
+                    <Icon name="check" size="xs" :stroke-width="2" />
+                  </span>
+                  <span class="min-w-0">
+                    <span class="block text-sm font-medium">{{ option.label }}</span>
+                    <span class="mt-0.5 block text-xs leading-4 text-slate-500 dark:text-slate-400">{{ option.description }}</span>
+                  </span>
+                </button>
+              </div>
+              <p
+                v-if="openAIImagesStreamMode === 'force_stream'"
+                class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+              >
+                {{ t('admin.accounts.openai.imagesStreamModeForceWarning') }}
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -2766,6 +2810,8 @@ const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
+type OpenAIImagesStreamMode = 'client' | 'force_stream'
+const openAIImagesStreamMode = ref<OpenAIImagesStreamMode>('client')
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
 const anthropicPassthroughEnabled = ref(false)
 const anthropicAPIKeyAuthScheme = ref<AnthropicAPIKeyAuthScheme>('x_api_key')
@@ -2879,6 +2925,28 @@ const codexImageToolBadgeClass = computed(() => {
       return 'bg-slate-100 text-slate-600 dark:bg-dark-600 dark:text-slate-300'
   }
 })
+const openAIImagesStreamModeOptions = computed<Array<{
+  value: OpenAIImagesStreamMode
+  label: string
+  description: string
+  selectedCardClass: string
+  selectedDotClass: string
+}>>(() => [
+  {
+    value: 'client',
+    label: t('admin.accounts.openai.imagesStreamModeClient'),
+    description: t('admin.accounts.openai.imagesStreamModeClientDesc'),
+    selectedCardClass: 'border-sky-300 bg-sky-50 text-sky-900 shadow-sm ring-1 ring-sky-200 dark:border-sky-700 dark:bg-sky-900/25 dark:text-sky-100 dark:ring-sky-800',
+    selectedDotClass: 'border-sky-500 bg-sky-500 text-white'
+  },
+  {
+    value: 'force_stream',
+    label: t('admin.accounts.openai.imagesStreamModeForce'),
+    description: t('admin.accounts.openai.imagesStreamModeForceDesc'),
+    selectedCardClass: 'border-emerald-300 bg-emerald-50 text-emerald-900 shadow-sm ring-1 ring-emerald-200 dark:border-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-100 dark:ring-emerald-800',
+    selectedDotClass: 'border-emerald-500 bg-emerald-500 text-white'
+  }
+])
 const openAICompactModeOptions = computed(() => [
   { value: 'auto', label: t('admin.accounts.openai.compactModeAuto') },
   { value: 'force_on', label: t('admin.accounts.openai.compactModeForceOn') },
@@ -3192,6 +3260,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
   codexImageToolMode.value = 'inherit'
+  openAIImagesStreamMode.value = 'client'
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
   webSearchEmulationMode.value = 'default'
@@ -3217,6 +3286,12 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     } else if (codexImageGenerationBridgeValue === false) {
       codexImageToolMode.value = 'disabled'
     }
+    openAIImagesStreamMode.value = extra?.openai_images_stream_mode === 'force_stream' ||
+      extra?.openai_image_stream_mode === 'force_stream' ||
+      extra?.openai_images_force_stream === true ||
+      extra?.openai_image_force_stream === true
+      ? 'force_stream'
+      : 'client'
     openaiOAuthResponsesWebSocketV2Mode.value = resolveOpenAIWSModeFromExtra(extra, {
       modeKey: 'openai_oauth_responses_websockets_v2_mode',
       enabledKey: 'openai_oauth_responses_websockets_v2_enabled',
@@ -4356,35 +4431,35 @@ const handleSubmit = async () => {
       } else {
         newExtra.openai_compact_mode = openAICompactMode.value
       }
-		if (props.account.type === 'apikey') {
+      if (props.account.type === 'apikey') {
         if (!openAITextGenerationCapabilityEnabled.value || openAIResponsesMode.value === 'auto') {
           delete newExtra.openai_responses_mode
         } else {
           newExtra.openai_responses_mode = openAIResponsesMode.value
         }
-		}
-		if (autoPause5hThreshold.value != null && autoPause5hThreshold.value > 0) {
-			newExtra.auto_pause_5h_threshold = autoPause5hThreshold.value / 100
-		} else {
-			delete newExtra.auto_pause_5h_threshold
-		}
-		if (autoPause7dThreshold.value != null && autoPause7dThreshold.value > 0) {
-			newExtra.auto_pause_7d_threshold = autoPause7dThreshold.value / 100
-		} else {
-			delete newExtra.auto_pause_7d_threshold
-		}
-		if (autoPause5hDisabled.value) {
-			newExtra.auto_pause_5h_disabled = true
-		} else {
-			delete newExtra.auto_pause_5h_disabled
-		}
-		if (autoPause7dDisabled.value) {
-			newExtra.auto_pause_7d_disabled = true
-		} else {
-			delete newExtra.auto_pause_7d_disabled
-		}
+      }
+      if (autoPause5hThreshold.value != null && autoPause5hThreshold.value > 0) {
+        newExtra.auto_pause_5h_threshold = autoPause5hThreshold.value / 100
+      } else {
+        delete newExtra.auto_pause_5h_threshold
+      }
+      if (autoPause7dThreshold.value != null && autoPause7dThreshold.value > 0) {
+        newExtra.auto_pause_7d_threshold = autoPause7dThreshold.value / 100
+      } else {
+        delete newExtra.auto_pause_7d_threshold
+      }
+      if (autoPause5hDisabled.value) {
+        newExtra.auto_pause_5h_disabled = true
+      } else {
+        delete newExtra.auto_pause_5h_disabled
+      }
+      if (autoPause7dDisabled.value) {
+        newExtra.auto_pause_7d_disabled = true
+      } else {
+        delete newExtra.auto_pause_7d_disabled
+      }
 
-		delete newExtra.codex_image_generation_bridge_enabled
+      delete newExtra.codex_image_generation_bridge_enabled
       switch (codexImageToolMode.value) {
         case 'enabled':
         case 'disabled':
@@ -4398,6 +4473,15 @@ const handleSubmit = async () => {
         default:
           delete newExtra.codex_image_generation_bridge
           delete newExtra.codex_image_generation_explicit_tool_policy
+      }
+
+      delete newExtra.openai_image_stream_mode
+      delete newExtra.openai_images_force_stream
+      delete newExtra.openai_image_force_stream
+      if (openAIImagesStreamMode.value === 'force_stream') {
+        newExtra.openai_images_stream_mode = 'force_stream'
+      } else {
+        delete newExtra.openai_images_stream_mode
       }
 
       if (props.account.type === 'oauth' || props.account.type === 'setup-token') {

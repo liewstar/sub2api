@@ -31,13 +31,17 @@ type updateServiceGitHubClientStub struct {
 	release        *GitHubRelease
 	recentReleases []*GitHubRelease
 	recentErr      error
+	latestRepo     string
+	recentRepo     string
 }
 
-func (s *updateServiceGitHubClientStub) FetchLatestRelease(context.Context, string) (*GitHubRelease, error) {
+func (s *updateServiceGitHubClientStub) FetchLatestRelease(_ context.Context, repo string) (*GitHubRelease, error) {
+	s.latestRepo = repo
 	return s.release, nil
 }
 
-func (s *updateServiceGitHubClientStub) FetchRecentReleases(context.Context, string, int) ([]*GitHubRelease, error) {
+func (s *updateServiceGitHubClientStub) FetchRecentReleases(_ context.Context, repo string, _ int) ([]*GitHubRelease, error) {
+	s.recentRepo = repo
 	return s.recentReleases, s.recentErr
 }
 
@@ -60,6 +64,7 @@ func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
 		},
 		"0.1.132",
 		"release",
+		DefaultUpdateRepository,
 	)
 
 	err := svc.PerformUpdate(context.Background())
@@ -75,7 +80,73 @@ func newRollbackTestService(current string, releases []*GitHubRelease) *UpdateSe
 		&updateServiceGitHubClientStub{recentReleases: releases},
 		current,
 		"release",
+		DefaultUpdateRepository,
 	)
+}
+
+func TestUpdateServiceUsesConfiguredRepository(t *testing.T) {
+	client := &updateServiceGitHubClientStub{
+		release: &GitHubRelease{
+			TagName: "v0.1.151-custom.1",
+			Name:    "v0.1.151-custom.1",
+		},
+	}
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		client,
+		"0.1.151-custom",
+		"release",
+		"liewstar/sub2api",
+	)
+
+	info, err := svc.CheckUpdate(context.Background(), true)
+
+	require.NoError(t, err)
+	require.Equal(t, "liewstar/sub2api", client.latestRepo)
+	require.Equal(t, "liewstar/sub2api", info.Repository)
+	require.True(t, info.HasUpdate)
+}
+
+func TestUpdateServiceDefaultsToCustomRepository(t *testing.T) {
+	client := &updateServiceGitHubClientStub{
+		release: &GitHubRelease{TagName: "v0.1.151-custom"},
+	}
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		client,
+		"0.1.151-custom",
+		"release",
+		"",
+	)
+
+	info, err := svc.CheckUpdate(context.Background(), true)
+
+	require.NoError(t, err)
+	require.Equal(t, DefaultUpdateRepository, client.latestRepo)
+	require.Equal(t, DefaultUpdateRepository, info.Repository)
+}
+
+func TestUpdateServiceIgnoresCacheFromDifferentRepository(t *testing.T) {
+	cache := &updateServiceCacheStub{
+		data: `{"latest":"9.9.9","repository":"Wei-Shaw/sub2api","timestamp":4102444800}`,
+	}
+	client := &updateServiceGitHubClientStub{
+		release: &GitHubRelease{TagName: "v0.1.151-custom"},
+	}
+	svc := NewUpdateService(
+		cache,
+		client,
+		"0.1.151-custom",
+		"release",
+		DefaultUpdateRepository,
+	)
+
+	info, err := svc.CheckUpdate(context.Background(), false)
+
+	require.NoError(t, err)
+	require.Equal(t, DefaultUpdateRepository, client.latestRepo)
+	require.Equal(t, "0.1.151-custom", info.LatestVersion)
+	require.False(t, info.HasUpdate)
 }
 
 func TestUpdateServiceListRollbackVersionsFiltersAndCaps(t *testing.T) {
@@ -137,12 +208,38 @@ func TestUpdateServiceListRollbackVersionsPropagatesFetchError(t *testing.T) {
 		&updateServiceGitHubClientStub{recentErr: errors.New("github unavailable")},
 		"0.1.147",
 		"release",
+		DefaultUpdateRepository,
 	)
 
 	_, err := svc.ListRollbackVersions(context.Background())
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "github unavailable")
+}
+
+func TestCompareVersionsSupportsCustomReleaseRevisions(t *testing.T) {
+	require.Equal(t, 0, compareVersions("0.1.151-custom", "v0.1.151-custom"))
+	require.Less(t, compareVersions("0.1.151-custom", "v0.1.151-custom.1"), 0)
+	require.Less(t, compareVersions("0.1.151-custom.1", "v0.1.151-custom.2"), 0)
+	require.Greater(t, compareVersions("0.1.152-custom", "v0.1.151-custom.9"), 0)
+}
+
+func TestUpdateServiceListRollbackVersionsIncludesCustomPrereleases(t *testing.T) {
+	releases := []*GitHubRelease{
+		{TagName: "v0.1.151-custom.3", Prerelease: true},
+		{TagName: "v0.1.151-custom.2", Prerelease: true},
+		{TagName: "v0.1.151-rc.1", Prerelease: true},
+		{TagName: "v0.1.151-custom.1", Prerelease: true},
+	}
+	svc := newRollbackTestService("0.1.151-custom.3", releases)
+
+	versions, err := svc.ListRollbackVersions(context.Background())
+
+	require.NoError(t, err)
+	require.Equal(t, []RollbackVersion{
+		{Version: "0.1.151-custom.2"},
+		{Version: "0.1.151-custom.1"},
+	}, versions)
 }
 
 func TestUpdateServiceRollbackToVersionRejectsDisallowedTargets(t *testing.T) {

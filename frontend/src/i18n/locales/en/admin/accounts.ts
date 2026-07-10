@@ -467,6 +467,17 @@ export default {
         codexImageToolBadgeEnabled: 'Force inject',
         codexImageToolBadgeDisabled: 'No injection',
         codexImageToolBadgeBlock: 'Blocked',
+        imagesStreamMode: 'Image generation stream policy',
+        imagesStreamModeDesc:
+          'Controls whether standalone image-generation requests force upstream stream mode. When upstream streaming is forced, non-streaming callers still receive normal JSON while the gateway keeps the connection alive with valid JSON whitespace.',
+        imagesStreamModeClient: 'Follow caller',
+        imagesStreamModeClientDesc:
+          'Only use streaming when the caller sends stream:true; normal requests keep the existing synchronous upstream behavior.',
+        imagesStreamModeForce: 'Force upstream stream',
+        imagesStreamModeForceDesc:
+          'Always send stream:true upstream; normal caller requests are collected by the gateway and returned as the original Images JSON.',
+        imagesStreamModeForceWarning:
+          'Recommended for image accounts behind Cloudflare. Once keepalive whitespace has been sent, later upstream errors can no longer change the HTTP status code, but the final body remains valid JSON.',
         compactMode: 'Compact mode',
         compactModeDesc:
           'Controls how this account participates in /responses/compact routing. Auto follows probe results, Force On always allows, Force Off always excludes.',

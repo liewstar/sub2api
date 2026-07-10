@@ -41,6 +41,13 @@ jobs:
           else
             VERSION=${GITHUB_REF#refs/tags/v}
           fi
+          case "$VERSION" in
+            *-custom*) ;;
+            *)
+              echo "Custom fork releases must use a *-custom* version, got: $VERSION"
+              exit 1
+              ;;
+          esac
           echo "$VERSION" > backend/cmd/server/VERSION
           echo "Updated VERSION file to: $VERSION"
 
@@ -232,7 +239,7 @@ jobs:
           fi
 
           # 构建消息内容
-          MESSAGE="🚀 *Sub2API 新版本发布！*"$'\n'$'\n'
+          MESSAGE="🚀 *Sub2API Custom 新版本发布！*"$'\n'$'\n'
           MESSAGE+="📦 版本号: \`${VERSION}\`"$'\n'$'\n'
 
           # 添加更新内容

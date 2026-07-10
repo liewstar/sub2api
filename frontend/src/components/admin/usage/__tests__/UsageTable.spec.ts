@@ -27,6 +27,8 @@ const messages: Record<string, string> = {
   'usage.serviceTierFlex': 'Flex',
   'usage.serviceTierStandard': 'Standard',
   'usage.rate': 'Rate',
+  'usage.cacheUtilization': 'Cache Utilization',
+  'usage.tokensPerSecond': 'tokens/s',
   'usage.accountMultiplier': 'Account rate',
   'usage.original': 'Original',
   'usage.userBilled': 'User billed',
@@ -72,6 +74,8 @@ const DataTableStub = {
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
+        <slot name="cell-cache_utilization" :row="row" />
+        <slot name="cell-tps" :row="row" />
       </div>
     </div>
   `,
@@ -206,6 +210,53 @@ describe('admin UsageTable tooltip', () => {
     const text = wrapper.text()
     expect(text).toContain('claude-sonnet-4')
     expect(text).toContain('claude-sonnet-4-20250514')
+  })
+
+  it('renders cache utilization and TPS for each usage row', () => {
+    const row = {
+      request_id: 'req-admin-metrics-1',
+      model: 'claude-3',
+      actual_cost: 0,
+      total_cost: 0,
+      account_rate_multiplier: 1,
+      rate_multiplier: 1,
+      input_cost: 0,
+      output_cost: 0,
+      cache_creation_cost: 0,
+      cache_read_cost: 0,
+      input_tokens: 200,
+      output_tokens: 120,
+      cache_creation_tokens: 300,
+      cache_read_tokens: 500,
+      cache_creation_5m_tokens: 0,
+      cache_creation_1h_tokens: 0,
+      cache_ttl_overridden: false,
+      duration_ms: 3000,
+    }
+
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [row],
+        loading: false,
+        columns: [
+          { key: 'cache_utilization', label: 'Cache Utilization' },
+          { key: 'tps', label: 'TPS' },
+        ],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('50.0%')
+    expect(text).toContain('40.0')
+    expect(text).toContain('tokens/s')
   })
 
   it.each([
@@ -440,6 +491,8 @@ const DataTableStubWithUser = {
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
+        <slot name="cell-cache_utilization" :row="row" />
+        <slot name="cell-tps" :row="row" />
       </div>
     </div>
   `,

@@ -1,0 +1,12 @@
+services:
+  sub2api:
+    image: sub2api:custom-20260708152107
+    pull_policy: never
+
+  postgres:
+    ports:
+      - "127.0.0.1:5433:5432"
+
+  redis:
+    ports:
+      - "127.0.0.1:6380:6379"

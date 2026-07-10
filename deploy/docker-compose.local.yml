@@ -151,6 +151,7 @@ services:
       # =======================================================================
       # Proxy for accessing GitHub (online updates + pricing data)
       # Examples: http://host:port, socks5://host:port
+      - UPDATE_REPOSITORY=${UPDATE_REPOSITORY:-liewstar/sub2api}
       - UPDATE_PROXY_URL=${UPDATE_PROXY_URL:-}
 
       # =======================================================================

@@ -424,6 +424,80 @@ func TestOpenAIGatewayService_CodexImageGenerationBridgeOverridePrecedence(t *te
 	}
 }
 
+func TestAccountOpenAIImagesStreamMode(t *testing.T) {
+	tests := []struct {
+		name    string
+		account *Account
+		want    string
+	}{
+		{
+			name:    "nil account defaults to client",
+			account: nil,
+			want:    openAIImagesStreamModeClient,
+		},
+		{
+			name: "unset openai account follows client",
+			account: &Account{
+				Platform: PlatformOpenAI,
+			},
+			want: openAIImagesStreamModeClient,
+		},
+		{
+			name: "force stream mode",
+			account: &Account{
+				Platform: PlatformOpenAI,
+				Extra: map[string]any{
+					featureKeyOpenAIImagesStreamMode: openAIImagesStreamModeForceStream,
+				},
+			},
+			want: openAIImagesStreamModeForceStream,
+		},
+		{
+			name: "legacy bool enables force stream",
+			account: &Account{
+				Platform: PlatformOpenAI,
+				Extra: map[string]any{
+					"openai_images_force_stream": true,
+				},
+			},
+			want: openAIImagesStreamModeForceStream,
+		},
+		{
+			name: "nested openai config is supported",
+			account: &Account{
+				Platform: PlatformOpenAI,
+				Extra: map[string]any{
+					PlatformOpenAI: map[string]any{
+						featureKeyOpenAIImagesStreamMode: "stream",
+					},
+				},
+			},
+			want: openAIImagesStreamModeForceStream,
+		},
+		{
+			name: "non openai account ignores extra",
+			account: &Account{
+				Platform: PlatformAnthropic,
+				Extra: map[string]any{
+					featureKeyOpenAIImagesStreamMode: openAIImagesStreamModeForceStream,
+				},
+			},
+			want: openAIImagesStreamModeClient,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.account == nil {
+				require.Equal(t, tt.want, tt.account.OpenAIImagesStreamMode())
+				return
+			}
+			require.Equal(t, tt.want, tt.account.OpenAIImagesStreamMode())
+			require.Equal(t, tt.want == openAIImagesStreamModeForceStream, tt.account.ForceOpenAIImagesStream())
+		})
+	}
+}
+
 func TestOpenAIGatewayServiceHandleResponsesImageOutputs_NonStreaming(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

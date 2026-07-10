@@ -210,21 +210,40 @@ func (s *GitHubReleaseServiceSuite) TestFetchChecksumFile_InvalidURL() {
 }
 
 func (s *GitHubReleaseServiceSuite) TestFetchLatestRelease_Success() {
-	releaseJSON := `{
-		"tag_name": "v1.0.0",
-		"name": "Release 1.0.0",
-		"body": "Release notes",
-		"html_url": "https://github.com/test/repo/releases/v1.0.0",
-		"assets": [
+	releaseJSON := `[
+		{
+			"tag_name": "v1.0.1-rc.1",
+			"name": "Release candidate",
+			"prerelease": true
+		},
+		{
+			"tag_name": "v1.0.0-custom.2",
+			"name": "Custom Release 1.0.0.2",
+			"body": "Custom release notes",
+			"html_url": "https://github.com/test/repo/releases/v1.0.0-custom.2",
+			"prerelease": true,
+			"assets": [
+				{
+					"name": "app-linux-amd64.tar.gz",
+					"browser_download_url": "https://github.com/test/repo/releases/download/v1.0.0-custom.2/app-linux-amd64.tar.gz"
+				}
+			]
+		},
+		{
+			"tag_name": "v0.9.9",
+			"name": "Stable Release 0.9.9",
+			"assets": [
 			{
 				"name": "app-linux-amd64.tar.gz",
-				"browser_download_url": "https://github.com/test/repo/releases/download/v1.0.0/app-linux-amd64.tar.gz"
+				"browser_download_url": "https://github.com/test/repo/releases/download/v0.9.9/app-linux-amd64.tar.gz"
 			}
-		]
-	}`
+			]
+		}
+	]`
 
 	s.srv = newLocalTestServer(s.T(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(s.T(), "/repos/test/repo/releases/latest", r.URL.Path)
+		require.Equal(s.T(), "/repos/test/repo/releases", r.URL.Path)
+		require.Equal(s.T(), "20", r.URL.Query().Get("per_page"))
 		require.Equal(s.T(), "application/vnd.github.v3+json", r.Header.Get("Accept"))
 		require.Equal(s.T(), "Sub2API-Updater", r.Header.Get("User-Agent"))
 		w.Header().Set("Content-Type", "application/json")
@@ -242,8 +261,8 @@ func (s *GitHubReleaseServiceSuite) TestFetchLatestRelease_Success() {
 
 	release, err := s.client.FetchLatestRelease(context.Background(), "test/repo")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), "v1.0.0", release.TagName)
-	require.Equal(s.T(), "Release 1.0.0", release.Name)
+	require.Equal(s.T(), "v1.0.0-custom.2", release.TagName)
+	require.Equal(s.T(), "Custom Release 1.0.0.2", release.Name)
 	require.Len(s.T(), release.Assets, 1)
 	require.Equal(s.T(), "app-linux-amd64.tar.gz", release.Assets[0].Name)
 }

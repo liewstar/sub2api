@@ -287,6 +287,8 @@ export default {
     type: 'Type',
     tokens: 'Tokens',
     cost: 'Cost',
+    cacheUtilization: 'Cache Utilization',
+    tokensPerSecond: 'tokens/s',
     firstToken: 'First Token',
     duration: 'Duration',
     latency: 'Latency',
